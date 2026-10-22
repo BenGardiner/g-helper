@@ -16,6 +16,8 @@ namespace GHelper.Input
     public class InputDispatcher
     {
         System.Timers.Timer timer = new System.Timers.Timer(AppConfig.Get("keyboard_timeout_refresh", 1000));
+        System.Timers.Timer slateTimer = new System.Timers.Timer(2000);
+        private static int slateState = -1;
         public static bool backlightActivity = true;
         public static bool lidClose = false;
         public static bool tentMode = false;
@@ -60,6 +62,9 @@ namespace GHelper.Input
             RegisterKeys();
 
             timer.Elapsed += Timer_Elapsed;
+
+            slateTimer.Elapsed += SlateTimer_Elapsed;
+            slateTimer.Enabled = AppConfig.HasTabletMode();
 
         }
 
@@ -850,6 +855,43 @@ namespace GHelper.Input
         public static void ToggleWinLock()
         {
             Program.toast.RunToast(Properties.Strings.WinLockToggle);
+        }
+
+        private void SlateTimer_Elapsed(object? sender, System.Timers.ElapsedEventArgs e)
+        {
+            SyncSlateMode();
+        }
+
+        // Keeps the Windows slate-mode state (ConvertibleSlateMode) in sync with the
+        // keyboard-cover state reported by the firmware, the same way TabletMode()
+        // does when a tablet-mode event (189) arrives. Stock G-Helper only syncs on
+        // that event and at startup, so when nothing re-asserts the state the
+        // persisted registry value can go stale - Windows then believes no keyboard
+        // is attached (touch keyboard icon, on-screen keyboard at the logon screen)
+        // even with the cover on. Polling closes that gap without any ASUS service.
+        public static void SyncSlateMode()
+        {
+            if (!AppConfig.HasTabletMode()) return;
+            if (AppConfig.Is("disable_tablet")) return;
+
+            // When the ASUS Optimization service is running it owns this state
+            // (same hand-off as the keyboard listener in Init) - don't fight it.
+            if (AsusService.IsAsusOptimizationRunning())
+            {
+                slateState = -1;
+                return;
+            }
+
+            int state = Program.acpi.DeviceGet(AsusACPI.SlateMode);
+            if (state < 0 || state > 1) return;
+            if (state == slateState) return;
+            slateState = state;
+
+            object? current = Registry.GetValue(@"HKEY_LOCAL_MACHINE\System\CurrentControlSet\Control\PriorityControl", "ConvertibleSlateMode", null);
+            if (current is int currentValue && currentValue == state) return;
+
+            Logger.WriteLine($"Slate mode sync: ConvertibleSlateMode -> {state}");
+            SetSlateMode(state);
         }
 
         public static void SetSlateMode(int status)
