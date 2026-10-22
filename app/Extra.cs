@@ -476,6 +476,7 @@ namespace GHelper
             pictureHelp.Click += PictureHelp_Click;
             buttonResetBindings.Click += ButtonResetBindings_Click;
             buttonServices.Click += ButtonServices_Click;
+            buttonPurgeServices.Click += ButtonPurgeServices_Click;
 
             pictureLog.Click += PictureLog_Click;
 
@@ -829,6 +830,72 @@ namespace GHelper
                 ServiesToggle();
             else
                 ProcessHelper.RunAsAdmin("services");
+        }
+
+        private void ButtonPurgeServices_Click(object? sender, EventArgs e)
+        {
+            if (ProcessHelper.IsUserAdministrator())
+                PurgeServices();
+            else
+                ProcessHelper.RunAsAdmin("purge-services");
+        }
+
+        // Phase-2 fork addition: one-click version of the ASUS-Free Setup guide's
+        // service purge (guide §4). Enumerates the purge-list services that are
+        // actually installed, asks for confirmation listing exactly those, then
+        // stops + disables them and reports the verified per-service result.
+        // The ATKWMIACPIIO kernel driver is not a service and is never touched;
+        // services are disabled, never deleted, so the guide's rollback applies.
+        public void PurgeServices()
+        {
+            buttonPurgeServices.Enabled = false;
+            Task.Run(() =>
+            {
+                var installed = AsusService.GetPurgeServiceStates();
+                if (IsDisposed) return;
+                Invoke(() =>
+                {
+                    if (installed.Count == 0)
+                    {
+                        MessageBox.Show("None of the ASUS services from the purge list are installed on this machine.", "Purge ASUS Services", MessageBoxButtons.OK);
+                        buttonPurgeServices.Enabled = true;
+                        return;
+                    }
+
+                    var lines = new List<string>();
+                    foreach (string name in AsusService.PurgeServices)
+                        if (installed.TryGetValue(name, out var state))
+                            lines.Add("- " + name + " (" + state.State + ", start: " + state.StartMode + ")");
+
+                    DialogResult confirm = MessageBox.Show(
+                        "Stop and disable these ASUS services?\n\n" + string.Join("\n", lines) +
+                        "\n\nThey will stay disabled until re-enabled. The ASUS kernel driver (ATKWMIACPIIO) is not touched, and this is reversible - see the ASUS-Free Setup guide's rollback section.",
+                        "Purge ASUS Services", MessageBoxButtons.YesNo);
+
+                    if (confirm != DialogResult.Yes)
+                    {
+                        buttonPurgeServices.Enabled = true;
+                        return;
+                    }
+
+                    labelServices.Text = "Purging services ...";
+                    Task.Run(() =>
+                    {
+                        var results = AsusService.PurgeAsusServices();
+                        Program.inputDispatcher?.Init();
+                        if (IsDisposed) return;
+                        BeginInvoke(delegate
+                        {
+                            var report = new List<string>();
+                            foreach (var (name, purged) in results)
+                                report.Add((purged ? "OK      " : "FAILED") + "  " + name);
+                            MessageBox.Show("Purge results:\n\n" + string.Join("\n", report), "Purge ASUS Services", MessageBoxButtons.OK);
+                            buttonPurgeServices.Enabled = true;
+                            InitServices();
+                        });
+                    });
+                });
+            });
         }
 
         private void CheckGpuApps_CheckedChanged(object? sender, EventArgs e)

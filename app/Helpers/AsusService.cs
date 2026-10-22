@@ -32,6 +32,31 @@ namespace GHelper.Helpers
                 "LightingService",
         };
 
+        // Phase-2 fork addition: the exact purge set from the ASUS-Free Setup guide
+        // (files/ASUS_FREE_SETUP.md §1/§4) — the six SCI v3 services, the Armoury Crate
+        // Control Interface service, and the three Armoury Crate core services.
+        // Nine of these key names are already used in the lists above. "ROGLiveService"
+        // (display name "ROG Live Service") is resolved from ASUS's own installer
+        // manifest component name (AppSetup.ini: APP-ROGLiveService); its binary sits in
+        // the Full Package's encrypted head and was not recovered in phase 2, so that
+        // one name is manifest-sourced rather than binary-verified.
+        // ATKWMIACPIIO (AsusWmiAcpi.sys) is deliberately NOT here: it is a kernel
+        // driver, not a user-mode service, and G-Helper depends on it.
+        static List<string> purgeServices = new() {
+                "ASUSOptimization",
+                "ASUSSoftwareManager",
+                "ASUSSystemDiagnosis",
+                "ASUSSystemAnalysis",
+                "AsusAppService",
+                "ASUSSwitch",
+                "ArmouryCrateControlInterface",
+                "ArmouryCrateService",
+                "ROGLiveService",
+                "LightingService",
+        };
+
+        public static IReadOnlyList<string> PurgeServices => purgeServices;
+
         private static bool IsRunning(string name)
         {
             var procs = Process.GetProcessesByName(name);
@@ -105,6 +130,53 @@ namespace GHelper.Helpers
             {
                 ProcessHelper.StartEnableService(service);
             }
+        }
+
+        // Phase-2 fork addition: states of the purge-list services that are actually
+        // installed (name -> State / StartMode), same WMI pattern as GetServiceStates.
+        public static Dictionary<string, (string State, string StartMode)> GetPurgeServiceStates()
+        {
+            var states = new Dictionary<string, (string State, string StartMode)>();
+            try
+            {
+                string filter = string.Join(" OR ", purgeServices.Select(name => $"Name='{name}'"));
+                using var searcher = new ManagementObjectSearcher($"SELECT Name, State, StartMode FROM Win32_Service WHERE {filter}");
+                foreach (ManagementObject mo in searcher.Get())
+                    states[(string)mo["Name"]] = ((string)mo["State"], (string)mo["StartMode"]);
+            }
+            catch (Exception ex)
+            {
+                Logger.WriteLine(ex.Message);
+            }
+            return states;
+        }
+
+        // Phase-2 fork addition: stop + disable every installed purge-list service
+        // (stop+disable only, never delete — matches the guide's reversible purge),
+        // then verify the outcome per service instead of trusting the stop command:
+        // a service counts as purged only when WMI reports it Stopped and Disabled.
+        // Returns one (name, purged) result per installed purge-list service.
+        public static List<(string Name, bool Purged)> PurgeAsusServices()
+        {
+            var before = GetPurgeServiceStates();
+
+            foreach (string service in purgeServices)
+            {
+                if (!before.TryGetValue(service, out var state)) continue; // not installed
+                if (state.State == "Stopped" && state.StartMode == "Disabled") continue; // already purged
+                ProcessHelper.StopDisableService(service, "Disabled");
+            }
+
+            var after = GetPurgeServiceStates();
+            var results = new List<(string Name, bool Purged)>();
+            foreach (string service in purgeServices)
+            {
+                if (!before.ContainsKey(service)) continue;
+                bool purged = after.TryGetValue(service, out var state) && state.State == "Stopped" && state.StartMode == "Disabled";
+                Logger.WriteLine($"Purge {service}: {(purged ? "stopped and disabled" : "FAILED — now " + (after.TryGetValue(service, out var now) ? now.State + " / " + now.StartMode : "unknown"))}");
+                results.Add((service, purged));
+            }
+            return results;
         }
 
         public static void StopOnStartup()

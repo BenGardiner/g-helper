@@ -194,6 +194,11 @@ namespace GHelper
                     settingsForm.extraForm.Show();
                     settingsForm.extraForm.ServiesToggle();
                     break;
+                case "purge-services":
+                    settingsForm.extraForm = new Extra();
+                    settingsForm.extraForm.Show();
+                    settingsForm.extraForm.PurgeServices();
+                    break;
                 case "uv":
                     Startup.ReScheduleAdmin();
                     settingsForm.FansToggle(2);
