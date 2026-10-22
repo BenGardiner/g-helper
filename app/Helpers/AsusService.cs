@@ -34,12 +34,17 @@ namespace GHelper.Helpers
 
         // Phase-2 fork addition: the exact purge set from the ASUS-Free Setup guide
         // (files/ASUS_FREE_SETUP.md §1/§4) — the six SCI v3 services, the Armoury Crate
-        // Control Interface service, and the three Armoury Crate core services.
+        // Control Interface service, the three Armoury Crate core services, and the
+        // GameSDK service from the Armoury Crate Full Package's SDK set.
         // Nine of these key names are already used in the lists above. "ROGLiveService"
         // (display name "ROG Live Service") is resolved from ASUS's own installer
         // manifest component name (AppSetup.ini: APP-ROGLiveService); its binary sits in
         // the Full Package's encrypted head and was not recovered in phase 2, so that
-        // one name is manifest-sourced rather than binary-verified.
+        // one name is manifest-sourced rather than binary-verified. "GameSDK Service"
+        // is verified from the extracted GameSDK.msi in the Full Package's SDK set:
+        // its CustomAction table registers the service with GameSDK.exe -install and
+        // starts/stops it via sc start/stop "GameSDK Service", so the key name really
+        // does contain a space.
         // ATKWMIACPIIO (AsusWmiAcpi.sys) is deliberately NOT here: it is a kernel
         // driver, not a user-mode service, and G-Helper depends on it.
         static List<string> purgeServices = new() {
@@ -53,6 +58,7 @@ namespace GHelper.Helpers
                 "ArmouryCrateService",
                 "ROGLiveService",
                 "LightingService",
+                "GameSDK Service",
         };
 
         public static IReadOnlyList<string> PurgeServices => purgeServices;
