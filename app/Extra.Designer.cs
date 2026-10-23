@@ -36,6 +36,13 @@ namespace GHelper
             pictureService = new PictureBox();
             labelServices = new Label();
             buttonServices = new RButton();
+            buttonPurgeServices = new RButton();
+            panelBootLogo = new Panel();
+            pictureBootLogo = new PictureBox();
+            labelBootLogo = new Label();
+            checkDisableBootAnim = new CheckBox();
+            buttonRemoveBootLogo = new RButton();
+            buttonInstallBootLogo = new RButton();
             panelBindingsHeader = new Panel();
             buttonResetBindings = new RButton();
             pictureBindings = new PictureBox();
@@ -151,6 +158,8 @@ namespace GHelper
             labelOptimalBrightness = new Label();
             panelServices.SuspendLayout();
             ((System.ComponentModel.ISupportInitialize)pictureService).BeginInit();
+            panelBootLogo.SuspendLayout();
+            ((System.ComponentModel.ISupportInitialize)pictureBootLogo).BeginInit();
             panelBindingsHeader.SuspendLayout();
             ((System.ComponentModel.ISupportInitialize)pictureBindings).BeginInit();
             ((System.ComponentModel.ISupportInitialize)pictureHelp).BeginInit();
@@ -188,6 +197,7 @@ namespace GHelper
             panelServices.Controls.Add(pictureService);
             panelServices.Controls.Add(labelServices);
             panelServices.Controls.Add(buttonServices);
+            panelServices.Controls.Add(buttonPurgeServices);
             panelServices.Dock = DockStyle.Top;
             panelServices.Location = new Point(15, 1778);
             panelServices.Name = "panelServices";
@@ -230,6 +240,101 @@ namespace GHelper
             buttonServices.TabIndex = 19;
             buttonServices.Text = "Start Services";
             buttonServices.UseVisualStyleBackColor = false;
+            // 
+            // buttonPurgeServices
+            // 
+            buttonPurgeServices.Activated = false;
+            buttonPurgeServices.Anchor = AnchorStyles.Bottom | AnchorStyles.Left;
+            buttonPurgeServices.BackColor = SystemColors.ButtonHighlight;
+            buttonPurgeServices.BorderColor = Color.Transparent;
+            buttonPurgeServices.BorderRadius = 2;
+            buttonPurgeServices.FlatStyle = FlatStyle.Flat;
+            buttonPurgeServices.Location = new Point(445, 11);
+            buttonPurgeServices.Margin = new Padding(5, 3, 5, 3);
+            buttonPurgeServices.Name = "buttonPurgeServices";
+            buttonPurgeServices.Secondary = false;
+            buttonPurgeServices.Size = new Size(256, 53);
+            buttonPurgeServices.TabIndex = 22;
+            buttonPurgeServices.Text = "Purge ASUS Services";
+            buttonPurgeServices.UseVisualStyleBackColor = false;
+            // 
+            // panelBootLogo
+            // 
+            panelBootLogo.AccessibleRole = AccessibleRole.Grouping;
+            panelBootLogo.Controls.Add(pictureBootLogo);
+            panelBootLogo.Controls.Add(labelBootLogo);
+            panelBootLogo.Controls.Add(checkDisableBootAnim);
+            panelBootLogo.Controls.Add(buttonRemoveBootLogo);
+            panelBootLogo.Controls.Add(buttonInstallBootLogo);
+            panelBootLogo.Dock = DockStyle.Top;
+            panelBootLogo.Location = new Point(15, 1703);
+            panelBootLogo.Name = "panelBootLogo";
+            panelBootLogo.Size = new Size(949, 75);
+            panelBootLogo.TabIndex = 6;
+            // 
+            // pictureBootLogo
+            // 
+            pictureBootLogo.BackgroundImage = Resources.icons8_animation_32;
+            pictureBootLogo.BackgroundImageLayout = ImageLayout.Zoom;
+            pictureBootLogo.Location = new Point(21, 19);
+            pictureBootLogo.Name = "pictureBootLogo";
+            pictureBootLogo.Size = new Size(32, 32);
+            pictureBootLogo.TabIndex = 21;
+            pictureBootLogo.TabStop = false;
+            // 
+            // labelBootLogo
+            // 
+            labelBootLogo.AutoSize = true;
+            labelBootLogo.Font = new Font("Segoe UI", 9F, FontStyle.Bold);
+            labelBootLogo.Location = new Point(57, 19);
+            labelBootLogo.Name = "labelBootLogo";
+            labelBootLogo.Size = new Size(273, 32);
+            labelBootLogo.TabIndex = 20;
+            labelBootLogo.Text = "Boot Logo Override (ESP)";
+            // 
+            // checkDisableBootAnim
+            // 
+            checkDisableBootAnim.AutoSize = true;
+            checkDisableBootAnim.Enabled = false;
+            checkDisableBootAnim.Location = new Point(60, 48);
+            checkDisableBootAnim.Name = "checkDisableBootAnim";
+            checkDisableBootAnim.Size = new Size(200, 24);
+            checkDisableBootAnim.TabIndex = 23;
+            checkDisableBootAnim.Text = "Disable boot animation";
+            // 
+            // buttonRemoveBootLogo
+            // 
+            buttonRemoveBootLogo.Activated = false;
+            buttonRemoveBootLogo.Anchor = AnchorStyles.Bottom | AnchorStyles.Left;
+            buttonRemoveBootLogo.BackColor = SystemColors.ButtonHighlight;
+            buttonRemoveBootLogo.BorderColor = Color.Transparent;
+            buttonRemoveBootLogo.BorderRadius = 2;
+            buttonRemoveBootLogo.FlatStyle = FlatStyle.Flat;
+            buttonRemoveBootLogo.Location = new Point(445, 11);
+            buttonRemoveBootLogo.Margin = new Padding(5, 3, 5, 3);
+            buttonRemoveBootLogo.Name = "buttonRemoveBootLogo";
+            buttonRemoveBootLogo.Secondary = false;
+            buttonRemoveBootLogo.Size = new Size(256, 53);
+            buttonRemoveBootLogo.TabIndex = 24;
+            buttonRemoveBootLogo.Text = "Remove Boot Logo";
+            buttonRemoveBootLogo.UseVisualStyleBackColor = false;
+            // 
+            // buttonInstallBootLogo
+            // 
+            buttonInstallBootLogo.Activated = false;
+            buttonInstallBootLogo.Anchor = AnchorStyles.Bottom | AnchorStyles.Left;
+            buttonInstallBootLogo.BackColor = SystemColors.ButtonHighlight;
+            buttonInstallBootLogo.BorderColor = Color.Transparent;
+            buttonInstallBootLogo.BorderRadius = 2;
+            buttonInstallBootLogo.FlatStyle = FlatStyle.Flat;
+            buttonInstallBootLogo.Location = new Point(713, 11);
+            buttonInstallBootLogo.Margin = new Padding(5, 3, 5, 3);
+            buttonInstallBootLogo.Name = "buttonInstallBootLogo";
+            buttonInstallBootLogo.Secondary = false;
+            buttonInstallBootLogo.Size = new Size(256, 53);
+            buttonInstallBootLogo.TabIndex = 25;
+            buttonInstallBootLogo.Text = "Install Boot Logo...";
+            buttonInstallBootLogo.UseVisualStyleBackColor = false;
             // 
             // panelBindingsHeader
             // 
@@ -1705,6 +1810,7 @@ namespace GHelper
             AutoSizeMode = AutoSizeMode.GrowAndShrink;
             ClientSize = new Size(1013, 1759);
             Controls.Add(panelServices);
+            Controls.Add(panelBootLogo);
             Controls.Add(panelPower);
             Controls.Add(panelSettings);
             Controls.Add(panelOptimalBrightness);
@@ -1730,6 +1836,9 @@ namespace GHelper
             panelServices.ResumeLayout(false);
             panelServices.PerformLayout();
             ((System.ComponentModel.ISupportInitialize)pictureService).EndInit();
+            panelBootLogo.ResumeLayout(false);
+            panelBootLogo.PerformLayout();
+            ((System.ComponentModel.ISupportInitialize)pictureBootLogo).EndInit();
             panelBindingsHeader.ResumeLayout(false);
             panelBindingsHeader.PerformLayout();
             ((System.ComponentModel.ISupportInitialize)pictureBindings).EndInit();
@@ -1779,7 +1888,14 @@ namespace GHelper
         #endregion
         private Panel panelServices;
         private RButton buttonServices;
+        private RButton buttonPurgeServices;
         private Label labelServices;
+        private Panel panelBootLogo;
+        private PictureBox pictureBootLogo;
+        private Label labelBootLogo;
+        private CheckBox checkDisableBootAnim;
+        private RButton buttonRemoveBootLogo;
+        private RButton buttonInstallBootLogo;
         private Panel panelBindingsHeader;
         private RButton buttonResetBindings;
         private Panel panelBindings;

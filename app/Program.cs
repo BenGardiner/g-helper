@@ -194,6 +194,26 @@ namespace GHelper
                     settingsForm.extraForm.Show();
                     settingsForm.extraForm.ServiesToggle();
                     break;
+                case "purge-services":
+                    settingsForm.extraForm = new Extra();
+                    settingsForm.extraForm.Show();
+                    settingsForm.extraForm.PurgeServices();
+                    break;
+                case "boot-logo":
+                    settingsForm.extraForm = new Extra();
+                    settingsForm.extraForm.Show();
+                    settingsForm.extraForm.InstallBootLogo();
+                    break;
+                case "boot-logo-remove":
+                    settingsForm.extraForm = new Extra();
+                    settingsForm.extraForm.Show();
+                    settingsForm.extraForm.RemoveBootLogo();
+                    break;
+                case "boot-anim":
+                    settingsForm.extraForm = new Extra();
+                    settingsForm.extraForm.Show();
+                    settingsForm.extraForm.ApplyBootAnimation();
+                    break;
                 case "uv":
                     Startup.ReScheduleAdmin();
                     settingsForm.FansToggle(2);

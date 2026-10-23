@@ -6,6 +6,7 @@ using GHelper.Input;
 using GHelper.Mode;
 using GHelper.UI;
 using GHelper.USB;
+using Microsoft.Win32;
 using System.Diagnostics;
 
 namespace GHelper
@@ -476,6 +477,10 @@ namespace GHelper
             pictureHelp.Click += PictureHelp_Click;
             buttonResetBindings.Click += ButtonResetBindings_Click;
             buttonServices.Click += ButtonServices_Click;
+            buttonPurgeServices.Click += ButtonPurgeServices_Click;
+            buttonInstallBootLogo.Click += ButtonInstallBootLogo_Click;
+            buttonRemoveBootLogo.Click += ButtonRemoveBootLogo_Click;
+            InitBootLogoPanel();
 
             pictureLog.Click += PictureLog_Click;
 
@@ -660,6 +665,18 @@ namespace GHelper
 
                 comboAPU.SelectedIndex = IntelVram.Index;
             }
+            else if (PawnIO.CpuInfo.IsAMD && AmdSharedMemory.Init())
+            {
+                // Firmware enumerates no VRAM_MEM options on this machine:
+                // fall back to the registry shared-memory limit ASUS's own
+                // service uses (see Gpu/AmdSharedMemory.cs).
+                comboAPU.Items.Clear();
+                comboAPU.Items.Add(Properties.Strings.AutoMode);
+                foreach (int percent in AmdSharedMemory.Percentages)
+                    comboAPU.Items.Add(((double)percent * AmdSharedMemory.TotalGb / 100).ToString("0.#") + "G (" + percent + "%)");
+
+                comboAPU.SelectedIndex = AmdSharedMemory.Index;
+            }
             else
             {
                 if (!AppConfig.IsAlly()) return;
@@ -679,13 +696,18 @@ namespace GHelper
         {
             int mem = comboAPU.SelectedIndex;
 
-            if (IntelVram.Supported && !ProcessHelper.IsUserAdministrator())
+            if ((IntelVram.Supported || AmdSharedMemory.Supported) && !ProcessHelper.IsUserAdministrator())
             {
                 ProcessHelper.RunAsAdmin();
                 return;
             }
 
             if (IntelVram.Supported) IntelVram.SetIndex(mem);
+            else if (AmdSharedMemory.Supported)
+            {
+                AmdSharedMemory.SetIndex(mem);
+                AppConfig.Set("shared_mem", mem > 0 ? AmdSharedMemory.Percentages[mem - 1] : 0);
+            }
             else if (vramOptions.Length == 0) Program.acpi.SetAPUMem(mem);
             else
             {
@@ -829,6 +851,280 @@ namespace GHelper
                 ServiesToggle();
             else
                 ProcessHelper.RunAsAdmin("services");
+        }
+
+        private void ButtonPurgeServices_Click(object? sender, EventArgs e)
+        {
+            if (ProcessHelper.IsUserAdministrator())
+                PurgeServices();
+            else
+                ProcessHelper.RunAsAdmin("purge-services");
+        }
+
+        // Phase-2 fork addition: one-click version of the ASUS-Free Setup guide's
+        // service purge (guide §4). Enumerates the purge-list services that are
+        // actually installed, asks for confirmation listing exactly those, then
+        // stops + disables them and reports the verified per-service result.
+        // The ATKWMIACPIIO kernel driver is not a service and is never touched;
+        // services are disabled, never deleted, so the guide's rollback applies.
+        public void PurgeServices()
+        {
+            buttonPurgeServices.Enabled = false;
+            Task.Run(() =>
+            {
+                var installed = AsusService.GetPurgeServiceStates();
+                if (IsDisposed) return;
+                Invoke(() =>
+                {
+                    if (installed.Count == 0)
+                    {
+                        MessageBox.Show("None of the ASUS services from the purge list are installed on this machine.", "Purge ASUS Services", MessageBoxButtons.OK);
+                        buttonPurgeServices.Enabled = true;
+                        return;
+                    }
+
+                    var lines = new List<string>();
+                    foreach (string name in AsusService.PurgeServices)
+                        if (installed.TryGetValue(name, out var state))
+                            lines.Add("- " + name + " (" + state.State + ", start: " + state.StartMode + ")");
+
+                    DialogResult confirm = MessageBox.Show(
+                        "Stop and disable these ASUS services?\n\n" + string.Join("\n", lines) +
+                        "\n\nThey will stay disabled until re-enabled. The ASUS kernel driver (ATKWMIACPIIO) is not touched, and this is reversible - see the ASUS-Free Setup guide's rollback section.",
+                        "Purge ASUS Services", MessageBoxButtons.YesNo);
+
+                    if (confirm != DialogResult.Yes)
+                    {
+                        buttonPurgeServices.Enabled = true;
+                        return;
+                    }
+
+                    labelServices.Text = "Purging services ...";
+                    Task.Run(() =>
+                    {
+                        var results = AsusService.PurgeAsusServices();
+                        Program.inputDispatcher?.Init();
+                        if (IsDisposed) return;
+                        BeginInvoke(delegate
+                        {
+                            var report = new List<string>();
+                            foreach (var (name, purged) in results)
+                                report.Add((purged ? "OK      " : "FAILED") + "  " + name);
+                            MessageBox.Show("Purge results:\n\n" + string.Join("\n", report), "Purge ASUS Services", MessageBoxButtons.OK);
+                            buttonPurgeServices.Enabled = true;
+                            InitServices();
+                        });
+                    });
+                });
+            });
+        }
+
+        // Fork feature, from the BIOS 314 boot-animation analysis: AMITSE in
+        // the GZ302 firmware loads a boot logo from \EFI\Logo\Logo.bmp on the
+        // EFI System Partition when one is present (hard-coded path found in
+        // the module). Install/remove run through the elevated startup
+        // actions in Program.cs, mirroring the services purge flow; the BMP
+        // picked unelevated is staged under %APPDATA%\GHelper for the
+        // elevated instance to copy (see Helpers\BootLogo.cs).
+        private void InitBootLogoPanel()
+        {
+            toolTip.SetToolTip(buttonInstallBootLogo, "Copies a BMP to \\EFI\\Logo\\Logo.bmp on the EFI System Partition. The firmware uses it as the POST logo; removing it restores the stock logo.");
+            toolTip.SetToolTip(buttonRemoveBootLogo, "Deletes \\EFI\\Logo\\Logo.bmp from the EFI System Partition, restoring the stock POST logo.");
+
+            // "Disable boot animation" (the firmware's "Animation Post Logo"
+            // enable, byte 0 of the AnimeLogoSetup setup variable): the
+            // layout was proven by IFR extraction of the BIOS 314 Setup
+            // module plus the factory-default NVAR store in the same image -
+            // see Helpers\BootAnimation.cs for the full evidence chain.
+            // Retail BIOS setup exposes only the animation AUDIO question on
+            // that page; there is no setup UI for the animation itself, so
+            // this checkbox is the only route. Gated on IsBios314() because
+            // the layout was proven for that version only. The write itself
+            // (read-modify-write in BootAnimation.SetAnimationEnabled, a
+            // successful read always precedes it) needs administrator rights,
+            // so toggling relaunches elevated like the boot-logo buttons.
+            if (!IsBios314())
+            {
+                checkDisableBootAnim.Enabled = false;
+                toolTip.SetToolTip(checkDisableBootAnim, "Only analysed for BIOS 314; this machine reports a different BIOS version, so this stays disabled.");
+                return;
+            }
+
+            checkDisableBootAnim.Enabled = true;
+            toolTip.SetToolTip(checkDisableBootAnim, "Disables the firmware's POST logo animation (BIOS 314, variable AnimeLogoSetup). Takes effect on the next reboot. The static POST logo still shows - pair it with a boot logo override above to change that too.");
+            RefreshBootAnimCheckbox();
+            checkDisableBootAnim.CheckedChanged += CheckDisableBootAnim_CheckedChanged;
+        }
+
+        private bool bootAnimSyncing;
+
+        // Reflects the firmware state in the checkbox when it can be read
+        // (reading needs the system-environment privilege, i.e. usually an
+        // elevated instance). If the read fails the checkbox is left as-is:
+        // the toggle flow re-reads in the elevated step before writing.
+        private void RefreshBootAnimCheckbox()
+        {
+            if (!BootAnimation.TryReadAnimationEnabled(out bool enabled)) return;
+            bootAnimSyncing = true;
+            checkDisableBootAnim.Checked = !enabled;
+            bootAnimSyncing = false;
+        }
+
+        private void CheckDisableBootAnim_CheckedChanged(object? sender, EventArgs e)
+        {
+            if (bootAnimSyncing) return;
+            bool disable = checkDisableBootAnim.Checked;
+
+            DialogResult confirm = MessageBox.Show(
+                (disable ? "Disable" : "Enable") + " the firmware's POST logo animation?\n\nThis writes byte 0 of the AnimeLogoSetup firmware variable (BIOS 314) and takes effect on the next reboot. The variable's audio bytes are left untouched, and the change is reversible by toggling it back. This needs administrator rights.",
+                "Boot Animation", MessageBoxButtons.YesNo);
+            if (confirm != DialogResult.Yes)
+            {
+                bootAnimSyncing = true;
+                checkDisableBootAnim.Checked = !disable;
+                bootAnimSyncing = false;
+                RefreshBootAnimCheckbox();
+                return;
+            }
+
+            AppConfig.Set("boot_anim_target_disabled", disable ? 1 : 0);
+            if (ProcessHelper.IsUserAdministrator())
+                ApplyBootAnimation();
+            else
+                ProcessHelper.RunAsAdmin("boot-anim");
+        }
+
+        // Runs in the elevated instance (startup action "boot-anim") or in
+        // place when already administrator: applies the target state staged
+        // in AppConfig by the checkbox handler, then shows the verified
+        // result. BootAnimation itself re-reads before writing and verifies
+        // after, so a stale target can never write blind.
+        public void ApplyBootAnimation()
+        {
+            int target = AppConfig.Get("boot_anim_target_disabled", -1);
+            if (target < 0)
+            {
+                RefreshBootAnimCheckbox();
+                return;
+            }
+
+            checkDisableBootAnim.Enabled = false;
+            Task.Run(() =>
+            {
+                var result = BootAnimation.SetAnimationEnabled(target == 0);
+                AppConfig.Set("boot_anim_target_disabled", -1);
+                if (IsDisposed) return;
+                BeginInvoke(delegate
+                {
+                    MessageBox.Show(result.Message, "Boot Animation", MessageBoxButtons.OK);
+                    checkDisableBootAnim.Enabled = IsBios314();
+                    RefreshBootAnimCheckbox();
+                });
+            });
+        }
+
+        private static bool IsBios314()
+        {
+            try
+            {
+                using var key = Registry.LocalMachine.OpenSubKey(@"HARDWARE\DESCRIPTION\System\BIOS");
+                if (key?.GetValue("BIOSVersion") is string version && version.Contains("314")) return true;
+                if (key?.GetValue("SystemBIOSVersion") is string[] versions)
+                    foreach (string v in versions)
+                        if (v.Contains("314")) return true;
+            }
+            catch (Exception ex)
+            {
+                Logger.WriteLine("Boot logo: BIOS version check failed (" + ex.Message + ")");
+            }
+            return false;
+        }
+
+        private void ButtonInstallBootLogo_Click(object? sender, EventArgs e)
+        {
+            using var dialog = new OpenFileDialog
+            {
+                Filter = "BMP images (*.bmp)|*.bmp",
+                Title = "Choose a boot logo BMP"
+            };
+            if (dialog.ShowDialog() != DialogResult.OK) return;
+
+            if (!BootLogo.IsValidBmp(dialog.FileName, out int width, out int height))
+            {
+                MessageBox.Show("That file is not a valid BMP image.", "Install Boot Logo", MessageBoxButtons.OK);
+                return;
+            }
+
+            if (!BootLogo.IsNativeSize(width, height))
+            {
+                DialogResult warn = MessageBox.Show(
+                    "This BMP is " + width + "x" + height + ". The firmware's own logo assets are 600x200, 800x266, 900x300 and 1200x400, and the firmware validates the image on load - a different size may be ignored.\n\nInstall it anyway?",
+                    "Install Boot Logo", MessageBoxButtons.YesNo);
+                if (warn != DialogResult.Yes) return;
+            }
+
+            DialogResult confirm = MessageBox.Show(
+                "Install " + Path.GetFileName(dialog.FileName) + " (" + width + "x" + height + ") as the boot logo?\n\nIt will be copied to \\EFI\\Logo\\Logo.bmp on the EFI System Partition. This needs administrator rights and takes effect at the next boot. Removing the override restores the stock logo.",
+                "Install Boot Logo", MessageBoxButtons.YesNo);
+            if (confirm != DialogResult.Yes) return;
+
+            if (!BootLogo.Stage(dialog.FileName))
+            {
+                MessageBox.Show("Could not stage the file for the elevated installer. See the G-Helper log for details.", "Install Boot Logo", MessageBoxButtons.OK);
+                return;
+            }
+
+            if (ProcessHelper.IsUserAdministrator())
+                InstallBootLogo();
+            else
+                ProcessHelper.RunAsAdmin("boot-logo");
+        }
+
+        private void ButtonRemoveBootLogo_Click(object? sender, EventArgs e)
+        {
+            DialogResult confirm = MessageBox.Show(
+                "Remove the boot logo override (\\EFI\\Logo\\Logo.bmp) from the EFI System Partition?\n\nThe stock firmware logo will be used at POST again. This needs administrator rights.",
+                "Remove Boot Logo", MessageBoxButtons.YesNo);
+            if (confirm != DialogResult.Yes) return;
+
+            if (ProcessHelper.IsUserAdministrator())
+                RemoveBootLogo();
+            else
+                ProcessHelper.RunAsAdmin("boot-logo-remove");
+        }
+
+        public void InstallBootLogo()
+        {
+            buttonInstallBootLogo.Enabled = false;
+            buttonRemoveBootLogo.Enabled = false;
+            Task.Run(() =>
+            {
+                var result = BootLogo.Install();
+                if (IsDisposed) return;
+                BeginInvoke(delegate
+                {
+                    MessageBox.Show(result.Message, "Install Boot Logo", MessageBoxButtons.OK);
+                    buttonInstallBootLogo.Enabled = true;
+                    buttonRemoveBootLogo.Enabled = true;
+                });
+            });
+        }
+
+        public void RemoveBootLogo()
+        {
+            buttonInstallBootLogo.Enabled = false;
+            buttonRemoveBootLogo.Enabled = false;
+            Task.Run(() =>
+            {
+                var result = BootLogo.Remove();
+                if (IsDisposed) return;
+                BeginInvoke(delegate
+                {
+                    MessageBox.Show(result.Message, "Remove Boot Logo", MessageBoxButtons.OK);
+                    buttonInstallBootLogo.Enabled = true;
+                    buttonRemoveBootLogo.Enabled = true;
+                });
+            });
         }
 
         private void CheckGpuApps_CheckedChanged(object? sender, EventArgs e)
