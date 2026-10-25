@@ -36,6 +36,7 @@ namespace GHelper
             pictureService = new PictureBox();
             labelServices = new Label();
             buttonServices = new RButton();
+            buttonPurgeServices = new RButton();
             panelBindingsHeader = new Panel();
             buttonResetBindings = new RButton();
             pictureBindings = new PictureBox();
@@ -188,6 +189,7 @@ namespace GHelper
             panelServices.Controls.Add(pictureService);
             panelServices.Controls.Add(labelServices);
             panelServices.Controls.Add(buttonServices);
+            panelServices.Controls.Add(buttonPurgeServices);
             panelServices.Dock = DockStyle.Top;
             panelServices.Location = new Point(15, 1778);
             panelServices.Name = "panelServices";
@@ -230,6 +232,23 @@ namespace GHelper
             buttonServices.TabIndex = 19;
             buttonServices.Text = "Start Services";
             buttonServices.UseVisualStyleBackColor = false;
+            // 
+            // buttonPurgeServices
+            // 
+            buttonPurgeServices.Activated = false;
+            buttonPurgeServices.Anchor = AnchorStyles.Bottom | AnchorStyles.Left;
+            buttonPurgeServices.BackColor = SystemColors.ButtonHighlight;
+            buttonPurgeServices.BorderColor = Color.Transparent;
+            buttonPurgeServices.BorderRadius = 2;
+            buttonPurgeServices.FlatStyle = FlatStyle.Flat;
+            buttonPurgeServices.Location = new Point(445, 11);
+            buttonPurgeServices.Margin = new Padding(5, 3, 5, 3);
+            buttonPurgeServices.Name = "buttonPurgeServices";
+            buttonPurgeServices.Secondary = false;
+            buttonPurgeServices.Size = new Size(256, 53);
+            buttonPurgeServices.TabIndex = 22;
+            buttonPurgeServices.Text = "Purge ASUS Services";
+            buttonPurgeServices.UseVisualStyleBackColor = false;
             // 
             // panelBindingsHeader
             // 
@@ -1779,6 +1798,7 @@ namespace GHelper
         #endregion
         private Panel panelServices;
         private RButton buttonServices;
+        private RButton buttonPurgeServices;
         private Label labelServices;
         private Panel panelBindingsHeader;
         private RButton buttonResetBindings;
