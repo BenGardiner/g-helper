@@ -16,6 +16,10 @@ namespace GHelper.Input
     public class InputDispatcher
     {
         System.Timers.Timer timer = new System.Timers.Timer(AppConfig.Get("keyboard_timeout_refresh", 1000));
+        System.Timers.Timer slateTimer = new System.Timers.Timer(2000);
+        private static int slateState = -1;
+        private static int polledSlateMode = int.MinValue;
+        private static int polledTabletState = int.MinValue;
         public static bool backlightActivity = true;
         public static bool lidClose = false;
         public static bool tentMode = false;
@@ -60,6 +64,9 @@ namespace GHelper.Input
             RegisterKeys();
 
             timer.Elapsed += Timer_Elapsed;
+
+            slateTimer.Elapsed += SlateTimer_Elapsed;
+            slateTimer.Enabled = AppConfig.HasTabletMode();
 
         }
 
@@ -162,7 +169,7 @@ namespace GHelper.Input
 
             if (!AppConfig.Is("skip_hotkeys"))
             {
-                if (AppConfig.IsDUO() || (AppConfig.IsVivoZenbook() && AppConfig.IsOLED()))
+                if (AppConfig.IsDUO() || (AppConfig.IsVivoZenPro() && AppConfig.IsOLED()))
                 {
                     hook.RegisterHotKey(keyModifierAlt, Keys.F7);
                     hook.RegisterHotKey(keyModifierAlt, Keys.F8);
@@ -850,6 +857,69 @@ namespace GHelper.Input
         public static void ToggleWinLock()
         {
             Program.toast.RunToast(Properties.Strings.WinLockToggle);
+        }
+
+        private void SlateTimer_Elapsed(object? sender, System.Timers.ElapsedEventArgs e)
+        {
+            SyncSlateMode();
+        }
+
+        // Keeps the Windows slate-mode state (ConvertibleSlateMode) in sync with the
+        // keyboard-cover state reported by the firmware, the same way TabletMode()
+        // does when a tablet-mode event (189) arrives. Stock G-Helper only syncs on
+        // that event and at startup, so when nothing re-asserts the state the
+        // persisted registry value can go stale - Windows then believes no keyboard
+        // is attached (touch keyboard icon, on-screen keyboard at the logon screen)
+        // even with the cover on. Polling closes that gap without any ASUS service.
+        public static void SyncSlateMode()
+        {
+            if (!AppConfig.HasTabletMode()) return;
+            if (AppConfig.Is("disable_tablet")) return;
+
+            // When the ASUS Optimization service is running it owns this state
+            // (same hand-off as the keyboard listener in Init) - don't fight it.
+            if (AsusService.IsAsusOptimizationRunning())
+            {
+                slateState = -1;
+                return;
+            }
+
+            int slateMode = Program.acpi.DeviceGet(AsusACPI.SlateMode);
+            int tabletState = Program.acpi.DeviceGet(AsusACPI.TabletState);
+
+            // Log the raw firmware readings whenever they change, so an
+            // attach/detach cycle leaves evidence even when no write follows.
+            if (slateMode != polledSlateMode || tabletState != polledTabletState)
+            {
+                Logger.WriteLine($"Slate poll: SlateMode={slateMode} TabletState={tabletState}");
+                polledSlateMode = slateMode;
+                polledTabletState = tabletState;
+            }
+
+            // Target state, cross-checking both firmware endpoints: slate (0)
+            // when either reports the keyboard unavailable - SlateMode 0, or a
+            // positive TabletState (tablet/tent/rotated) - and laptop (1) only
+            // when SlateMode reports it and TabletState does not contradict.
+            // The cross-check exists because the first hardware test
+            // (2026-10-23, GZ302, services purged) showed attach syncing but
+            // detach leaving Windows in laptop mode (no touch keyboard):
+            // SlateMode alone did not flip back, while TabletState is the
+            // endpoint the machine's own ACPI scan showed answering
+            // Tablet_Notebook (0) with the cover attached - and it is the
+            // second endpoint TabletMode() already consults.
+            int state;
+            if (tabletState > 0 || slateMode == 0) state = 0;
+            else if (slateMode == 1) state = 1;
+            else return; // no trustworthy reading this tick - never guess a state
+
+            if (state == slateState) return;
+            slateState = state;
+
+            object? current = Registry.GetValue(@"HKEY_LOCAL_MACHINE\System\CurrentControlSet\Control\PriorityControl", "ConvertibleSlateMode", null);
+            if (current is int currentValue && currentValue == state) return;
+
+            Logger.WriteLine($"Slate mode sync: ConvertibleSlateMode -> {state}");
+            SetSlateMode(state);
         }
 
         public static void SetSlateMode(int status)
